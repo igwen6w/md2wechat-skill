@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/geekjourney/md2wechat/internal/config"
-	"github.com/geekjourney/md2wechat/internal/wechat"
+	"github.com/geekjourneyx/md2wechat-skill/internal/config"
+	"github.com/geekjourneyx/md2wechat-skill/internal/wechat"
 	"github.com/silenceper/wechat/v2/officialaccount/draft"
 	"go.uber.org/zap"
 )
@@ -82,10 +82,10 @@ func (s *Service) CreateDraftFromFile(jsonFile string) (*DraftResult, error) {
 		}
 
 		article := &draft.Article{
-			Title:    a.Title,
-			Content:  a.Content,
-			Digest:   a.Digest,
-			Author:   a.Author,
+			Title:   a.Title,
+			Content: a.Content,
+			Digest:  a.Digest,
+			Author:  a.Author,
 		}
 
 		if a.ThumbMediaID != "" {
@@ -118,10 +118,10 @@ func (s *Service) CreateDraft(articles []Article) (*DraftResult, error) {
 	var draftArticles []*draft.Article
 	for _, a := range articles {
 		article := &draft.Article{
-			Title:  a.Title,
+			Title:   a.Title,
 			Content: a.Content,
 			Digest:  a.Digest,
-			Author: a.Author,
+			Author:  a.Author,
 		}
 
 		if a.ThumbMediaID != "" {

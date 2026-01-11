@@ -7,32 +7,32 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/geekjourney/md2wechat/internal/config"
-	"github.com/geekjourney/md2wechat/internal/wechat"
+	"github.com/geekjourneyx/md2wechat-skill/internal/config"
+	"github.com/geekjourneyx/md2wechat-skill/internal/wechat"
 	"go.uber.org/zap"
 )
 
 // Processor 图片处理器
 type Processor struct {
-	cfg *config.Config
-	log *zap.Logger
-	ws  *wechat.Service
+	cfg        *config.Config
+	log        *zap.Logger
+	ws         *wechat.Service
+	compressor *Compressor
 }
 
 // NewProcessor 创建图片处理器
 func NewProcessor(cfg *config.Config, log *zap.Logger) *Processor {
 	return &Processor{
-		cfg: cfg,
-		log: log,
-		ws:  wechat.NewService(cfg, log),
+		cfg:        cfg,
+		log:        log,
+		ws:         wechat.NewService(cfg, log),
+		compressor: NewCompressor(log, cfg.MaxImageWidth, cfg.MaxImageSize),
 	}
 }
 
-// UploadLocalImage 上传本地图片
+// UploadResult 上传结果
 type UploadResult struct {
 	MediaID   string `json:"media_id"`
 	WechatURL string `json:"wechat_url"`
@@ -40,6 +40,7 @@ type UploadResult struct {
 	Height    int    `json:"height"`
 }
 
+// UploadLocalImage 上传本地图片
 func (p *Processor) UploadLocalImage(filePath string) (*UploadResult, error) {
 	p.log.Info("uploading local image", zap.String("path", filePath))
 
@@ -48,15 +49,21 @@ func (p *Processor) UploadLocalImage(filePath string) (*UploadResult, error) {
 		return nil, fmt.Errorf("file not found: %s", filePath)
 	}
 
+	// 检查图片格式
+	if !IsValidImageFormat(filePath) {
+		return nil, fmt.Errorf("unsupported image format: %s", filePath)
+	}
+
 	// 如果需要压缩，先处理
 	processedPath := filePath
 	if p.cfg.CompressImages {
-		compressedPath, err := p.compressIfNeeded(filePath)
+		compressedPath, compressed, err := p.compressor.CompressImage(filePath)
 		if err != nil {
 			p.log.Warn("compress failed, using original", zap.Error(err))
-		} else if compressedPath != "" {
+		} else if compressed {
 			processedPath = compressedPath
 			defer os.Remove(compressedPath)
+			p.log.Info("using compressed image", zap.String("path", processedPath))
 		}
 	}
 
@@ -83,15 +90,21 @@ func (p *Processor) DownloadAndUpload(url string) (*UploadResult, error) {
 	}
 	defer os.Remove(tmpPath)
 
+	// 检查格式
+	if !IsValidImageFormat(tmpPath) {
+		return nil, fmt.Errorf("downloaded file is not a valid image")
+	}
+
 	// 压缩（如果需要）
 	processedPath := tmpPath
 	if p.cfg.CompressImages {
-		compressedPath, err := p.compressIfNeeded(tmpPath)
+		compressedPath, compressed, err := p.compressor.CompressImage(tmpPath)
 		if err != nil {
 			p.log.Warn("compress failed, using original", zap.Error(err))
-		} else if compressedPath != "" {
+		} else if compressed {
 			processedPath = compressedPath
 			defer os.Remove(compressedPath)
+			p.log.Info("using compressed image", zap.String("path", processedPath))
 		}
 	}
 
@@ -109,12 +122,12 @@ func (p *Processor) DownloadAndUpload(url string) (*UploadResult, error) {
 
 // GenerateAndUploadResult AI 生成图片结果
 type GenerateAndUploadResult struct {
-	Prompt     string `json:"prompt"`
+	Prompt      string `json:"prompt"`
 	OriginalURL string `json:"original_url"`
-	MediaID    string `json:"media_id"`
-	WechatURL  string `json:"wechat_url"`
-	Width      int    `json:"width"`
-	Height     int    `json:"height"`
+	MediaID     string `json:"media_id"`
+	WechatURL   string `json:"wechat_url"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
 }
 
 // GenerateAndUpload AI 生成图片并上传
@@ -143,12 +156,13 @@ func (p *Processor) GenerateAndUpload(prompt string) (*GenerateAndUploadResult, 
 	// 压缩（如果需要）
 	processedPath := tmpPath
 	if p.cfg.CompressImages {
-		compressedPath, err := p.compressIfNeeded(tmpPath)
+		compressedPath, compressed, err := p.compressor.CompressImage(tmpPath)
 		if err != nil {
 			p.log.Warn("compress failed, using original", zap.Error(err))
-		} else if compressedPath != "" {
+		} else if compressed {
 			processedPath = compressedPath
 			defer os.Remove(compressedPath)
+			p.log.Info("using compressed image", zap.String("path", processedPath))
 		}
 	}
 
@@ -169,11 +183,11 @@ func (p *Processor) GenerateAndUpload(prompt string) (*GenerateAndUploadResult, 
 // callImageAPI 调用图片生成 API（兼容 OpenAI DALL-E）
 func (p *Processor) callImageAPI(prompt string) (string, error) {
 	// 构造请求
-	reqBody := map[string]interface{}{
-		"model": "dall-e-3",
+	reqBody := map[string]any{
+		"model":  "dall-e-3",
 		"prompt": prompt,
-		"n":     1,
-		"size":  "1024x1024",
+		"n":      1,
+		"size":   "1024x1024",
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -222,72 +236,17 @@ func (p *Processor) callImageAPI(prompt string) (string, error) {
 	return result.Data[0].URL, nil
 }
 
-// compressIfNeeded 如果图片太大则压缩
-func (p *Processor) compressIfNeeded(filePath string) (string, error) {
-	// 检查文件大小
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return "", err
-	}
-
-	// 如果文件大小小于限制，不需要压缩
-	if fileInfo.Size() < p.cfg.MaxImageSize {
-		return "", nil
-	}
-
-	p.log.Info("compressing image",
-		zap.String("path", filePath),
-		zap.Int64("size", fileInfo.Size()))
-
-	// 这里应该使用图片压缩库
-	// 由于避免引入重型依赖，这里简化处理：
-	// 1. 读取文件
-	// 2. 使用压缩库处理
-	// 3. 保存到临时文件
-
-	// 简化实现：直接返回原路径，实际应该调用压缩函数
-	// 可以使用 imaging 或 similar 库
-
-	return "", nil
+// GetImageInfo 获取图片信息
+func (p *Processor) GetImageInfo(filePath string) (*ImageInfo, error) {
+	return GetImageInfo(filePath)
 }
 
-// detectFormat 检测图片格式
-func detectFormat(filePath string) string {
-	ext := strings.ToLower(filepath.Ext(filePath))
-	switch ext {
-	case ".jpg", ".jpeg":
-		return "jpeg"
-	case ".png":
-		return "png"
-	case ".gif":
-		return "gif"
-	default:
-		return "jpeg" // 默认
-	}
+// CompressImage 压缩图片（公开方法）
+func (p *Processor) CompressImage(filePath string) (string, bool, error) {
+	return p.compressor.CompressImage(filePath)
 }
 
-// readImageDimensions 读取图片尺寸
-func readImageDimensions(filePath string) (int, int, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer file.Close()
-
-	// 简化实现：需要图片库来读取尺寸
-	// 这里返回默认值
-	return 1920, 1080, nil
-}
-
-// isValidFormat 检查是否是有效的图片格式
-func isValidFormat(filePath string) bool {
-	validExts := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".gif":  true,
-	}
-
-	ext := strings.ToLower(filepath.Ext(filePath))
-	return validExts[ext]
+// SetCompressQuality 设置压缩质量
+func (p *Processor) SetCompressQuality(quality int) {
+	p.compressor.SetQuality(quality)
 }

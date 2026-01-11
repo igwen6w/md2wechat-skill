@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/geekjourney/md2wechat/internal/config"
-	"github.com/geekjourney/md2wechat/internal/draft"
-	"github.com/geekjourney/md2wechat/internal/image"
+	"github.com/geekjourneyx/md2wechat-skill/internal/config"
+	"github.com/geekjourneyx/md2wechat-skill/internal/draft"
+	"github.com/geekjourneyx/md2wechat-skill/internal/image"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
@@ -16,56 +17,32 @@ var (
 	log *zap.Logger
 )
 
-func init() {
+// initConfig 初始化配置（延迟加载，允许 help 命令无需配置）
+func initConfig() error {
+	if cfg != nil && log != nil {
+		return nil
+	}
+
 	var err error
 	cfg, err = config.Load()
 	if err != nil {
-		responseError(err)
-		os.Exit(1)
+		return err
 	}
 
 	log, err = zap.NewProduction()
 	if err != nil {
-		responseError(err)
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
-
-	command := os.Args[1]
-	args := os.Args[2:]
-
-	switch command {
-	case "upload_image":
-		cmdUploadImage(args)
-	case "download_and_upload":
-		cmdDownloadAndUpload(args)
-	case "generate_image":
-		cmdGenerateImage(args)
-	case "create_draft":
-		cmdCreateDraft(args)
-	case "help", "-h", "--help":
-		printUsage()
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
-		printUsage()
-		os.Exit(1)
-	}
-}
-
-func printUsage() {
-	fmt.Println(`md2wechat - Markdown to WeChat Official Account converter
-
-Commands:
-  upload_image <file_path>       Upload local image to WeChat material library
-  download_and_upload <url>      Download online image and upload to WeChat
-  generate_image <prompt>        Generate image via AI and upload to WeChat
-  create_draft <json_file>       Create WeChat draft article from JSON file
+	var rootCmd = &cobra.Command{
+		Use:   "md2wechat",
+		Short: "Markdown to WeChat Official Account converter",
+		Long: `md2wechat converts Markdown articles to WeChat Official Account format
+and supports uploading materials and creating drafts.
 
 Environment Variables:
   WECHAT_APPID                   WeChat Official Account AppID (required)
@@ -76,89 +53,113 @@ Environment Variables:
   MAX_IMAGE_WIDTH                Max image width in pixels (default: 1920)
 
 Examples:
-  # Upload local image
   md2wechat upload_image ./photo.jpg
-
-  # Download and upload online image
   md2wechat download_and_upload https://example.com/image.jpg
-
-  # Generate AI image
   md2wechat generate_image "A cute cat"
-
-  # Create draft
-  md2wechat create_draft draft.json`)
-}
-
-func cmdUploadImage(args []string) {
-	if len(args) < 1 {
-		responseError(fmt.Errorf("file_path is required"))
-		return
+  md2wechat create_draft draft.json`,
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 
-	filePath := args[0]
-	processor := image.NewProcessor(cfg, log)
-	result, err := processor.UploadLocalImage(filePath)
-	if err != nil {
+	// upload_image command
+	var uploadImageCmd = &cobra.Command{
+		Use:   "upload_image <file_path>",
+		Short: "Upload local image to WeChat material library",
+		Args:  cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return initConfig()
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			filePath := args[0]
+			processor := image.NewProcessor(cfg, log)
+			result, err := processor.UploadLocalImage(filePath)
+			if err != nil {
+				responseError(err)
+				return
+			}
+			responseSuccess(result)
+		},
+	}
+	rootCmd.AddCommand(uploadImageCmd)
+
+	// download_and_upload command
+	var downloadAndUploadCmd = &cobra.Command{
+		Use:   "download_and_upload <url>",
+		Short: "Download online image and upload to WeChat",
+		Args:  cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return initConfig()
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			url := args[0]
+			processor := image.NewProcessor(cfg, log)
+			result, err := processor.DownloadAndUpload(url)
+			if err != nil {
+				responseError(err)
+				return
+			}
+			responseSuccess(result)
+		},
+	}
+	rootCmd.AddCommand(downloadAndUploadCmd)
+
+	// generate_image command
+	var generateImageCmd = &cobra.Command{
+		Use:   "generate_image <prompt>",
+		Short: "Generate image via AI and upload to WeChat",
+		Args:  cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return initConfig()
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			prompt := args[0]
+			processor := image.NewProcessor(cfg, log)
+			result, err := processor.GenerateAndUpload(prompt)
+			if err != nil {
+				responseError(err)
+				return
+			}
+			responseSuccess(result)
+		},
+	}
+	rootCmd.AddCommand(generateImageCmd)
+
+	// create_draft command
+	var createDraftCmd = &cobra.Command{
+		Use:   "create_draft <json_file>",
+		Short: "Create WeChat draft article from JSON file",
+		Args:  cobra.ExactArgs(1),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return initConfig()
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			jsonFile := args[0]
+			svc := draft.NewService(cfg, log)
+			result, err := svc.CreateDraftFromFile(jsonFile)
+			if err != nil {
+				responseError(err)
+				return
+			}
+			responseSuccess(result)
+		},
+	}
+	rootCmd.AddCommand(createDraftCmd)
+
+	// convert command
+	rootCmd.AddCommand(convertCmd)
+
+	// config command
+	rootCmd.AddCommand(configCmd)
+
+	// Execute
+	if err := rootCmd.Execute(); err != nil {
 		responseError(err)
-		return
+		os.Exit(1)
 	}
-
-	responseSuccess(result)
 }
 
-func cmdDownloadAndUpload(args []string) {
-	if len(args) < 1 {
-		responseError(fmt.Errorf("url is required"))
-		return
-	}
-
-	url := args[0]
-	processor := image.NewProcessor(cfg, log)
-	result, err := processor.DownloadAndUpload(url)
-	if err != nil {
-		responseError(err)
-		return
-	}
-
-	responseSuccess(result)
-}
-
-func cmdGenerateImage(args []string) {
-	if len(args) < 1 {
-		responseError(fmt.Errorf("prompt is required"))
-		return
-	}
-
-	prompt := args[0]
-	processor := image.NewProcessor(cfg, log)
-	result, err := processor.GenerateAndUpload(prompt)
-	if err != nil {
-		responseError(err)
-		return
-	}
-
-	responseSuccess(result)
-}
-
-func cmdCreateDraft(args []string) {
-	if len(args) < 1 {
-		responseError(fmt.Errorf("json_file is required"))
-		return
-	}
-
-	jsonFile := args[0]
-	svc := draft.NewService(cfg, log)
-	result, err := svc.CreateDraftFromFile(jsonFile)
-	if err != nil {
-		responseError(err)
-		return
-	}
-
-	responseSuccess(result)
-}
-
-func responseSuccess(data interface{}) {
-	response := map[string]interface{}{
+func responseSuccess(data any) {
+	response := map[string]any{
 		"success": true,
 		"data":    data,
 	}
@@ -166,7 +167,7 @@ func responseSuccess(data interface{}) {
 }
 
 func responseError(err error) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"success": false,
 		"error":   err.Error(),
 	}
@@ -174,7 +175,7 @@ func responseError(err error) {
 	os.Exit(1)
 }
 
-func printJSON(v interface{}) {
+func printJSON(v any) {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	encoder.SetEscapeHTML(false)
@@ -182,4 +183,12 @@ func printJSON(v interface{}) {
 		fmt.Fprintf(os.Stderr, "JSON encode error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// maskMediaID 遮蔽 media_id 用于日志
+func maskMediaID(id string) string {
+	if len(id) < 8 {
+		return "***"
+	}
+	return id[:4] + "***" + id[len(id)-4:]
 }
