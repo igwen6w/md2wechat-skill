@@ -1,7 +1,7 @@
-# 默认 API 主题
+# 默认主题
 name: default
 type: api
-description: "API 默认主题"
+description: "默认主题"
 version: "1.0"
 
 # API 模式使用的主题名

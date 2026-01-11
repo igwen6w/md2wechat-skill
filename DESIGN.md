@@ -92,7 +92,7 @@
 │  Request Body:                                              │
 │  {                                                          │
 │    "markdown": string,    // Markdown 内容                 │
-│    "theme": string,       // default/leo/...               │
+│    "theme": string,       // default/bytedance/apple/...   │
 │    "fontSize": string     // small/medium/large            │
 │  }                                                          │
 │                                                             │
@@ -304,14 +304,25 @@ md2wechat convert article.md --mode api --output output.html
 
 ### 7.1 主题列表
 
-| 主题名 | 模式 | 描述 |
-|--------|------|------|
-| `default` | API | API 默认主题 |
-| `leo` | API | API leo 主题 |
-| `autumn-warm` | AI | **【秋日暖光】** 温暖治愈，橙色调 #d97758，文艺美学 |
-| `spring-fresh` | AI | **【春日清新】** 清新自然，绿色调 #6b9b7a，生机盎然 |
-| `ocean-calm` | AI | **【深海静谧】** 深邃冷静，蓝色调 #4a7c9b，理性专业 |
-| `custom` | AI | 自定义主题，使用用户自己的提示词 |
+**API 主题**（快速稳定，调用 md2wechat.cn API）：
+
+| 主题名 | 描述 |
+|--------|------|
+| `default` | API 默认主题 |
+| `bytedance` | 字节跳动风格 |
+| `apple` | Apple 极简风格 |
+| `sports` | 运动活力风格 |
+| `chinese` | 中国传统文化风格 |
+| `cyber` | 赛博朋克风格 |
+
+**AI 主题**（精美排版，Claude AI 生成）：
+
+| 主题名 | 描述 |
+|--------|------|
+| `autumn-warm` | **【秋日暖光】** 温暖治愈，橙色调 #d97758，文艺美学 |
+| `spring-fresh` | **【春日清新】** 清新自然，绿色调 #6b9b7a，生机盎然 |
+| `ocean-calm` | **【深海静谧】** 深邃冷静，蓝色调 #4a7c9b，理性专业 |
+| `custom` | 自定义主题，使用用户自己的提示词 |
 
 ### 7.2 主题对比
 
@@ -331,25 +342,43 @@ md2wechat convert article.md --mode api --output output.html
 // internal/converter/theme.go
 
 var BuiltInThemes = map[string]Theme{
+    // API 主题
     "default": {
         Type:     "api",
         APITheme: "default",
     },
-    "leo": {
+    "bytedance": {
         Type:     "api",
-        APITheme: "leo",
+        APITheme: "bytedance",
     },
-    "minimal": {
-        Type:  "ai",
-        AIPrompt: minimalPrompt,
+    "apple": {
+        Type:     "api",
+        APITheme: "apple",
     },
-    "elegant": {
-        Type:  "ai",
-        AIPrompt: elegantPrompt,
+    "sports": {
+        Type:     "api",
+        APITheme: "sports",
     },
-    "tech": {
+    "chinese": {
+        Type:     "api",
+        APITheme: "chinese",
+    },
+    "cyber": {
+        Type:     "api",
+        APITheme: "cyber",
+    },
+    // AI 主题
+    "autumn-warm": {
         Type:  "ai",
-        AIPrompt: techPrompt,
+        AIPrompt: autumnWarmPrompt,
+    },
+    "spring-fresh": {
+        Type:  "ai",
+        AIPrompt: springFreshPrompt,
+    },
+    "ocean-calm": {
+        Type:  "ai",
+        AIPrompt: oceanCalmPrompt,
     },
 }
 

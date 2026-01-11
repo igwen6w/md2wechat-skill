@@ -95,9 +95,20 @@ export WECHAT_SECRET="your_secret_here"
 ```
 
 **如何获取 AppID 和 Secret**：
-1. 登录 [mp.weixin.qq.com](https://mp.weixin.qq.com)
-2. 设置与开发 > 基本配置
-3. 复制 AppID，重置获取 Secret
+
+1. 访问 **[微信开发者平台](https://developers.weixin.qq.com/platform)**
+
+2. 登录后，选择你的公众号（如果没有，请先注册）
+
+3. 点击左侧菜单 **「设置与开发」** → **「基本配置」**
+
+4. 在「开发者ID」区域可以看到：
+   - **开发者ID(AppID)**：直接复制即可
+   - **开发者密码(AppSecret)**：点击「重置」按钮获取
+
+   > **警告**：AppSecret 非常重要，请妥善保管，不要泄露给他人！
+
+5. 复制这两个值到配置文件或环境变量中
 
 ---
 
@@ -300,7 +311,55 @@ md2wechat convert article.md --upload -o output.html
 
 ## 微信 API 问题
 
-### Q13: 提示 "access_token expired"
+### Q13: 第一次调用 API 提示 "IP 不在白名单中"
+
+**现象**：第一次调用微信 API 时，返回错误：
+```
+ip xxx.xxx.xxx.xxx not in whitelist
+```
+
+**原因**：微信为了安全，要求服务器 IP 必须在白名单中才能调用 API。
+
+**解决方案**：
+
+1. **获取你的服务器 IP 地址**
+
+```bash
+# 查看你的公网 IP
+curl ifconfig.me
+# 或
+curl ip.sb
+# 或
+curl ipinfo.io/ip
+```
+
+2. **添加 IP 到微信白名单**
+
+   - 访问 [微信开发者平台](https://developers.weixin.qq.com/platform)
+   - 选择你的公众号
+   - 点击 **「设置与开发」** → **「基本配置」**
+   - 找到 **「IP白名单」** 区域
+   - 点击「设置」
+   - 输入你的服务器 IP 地址（多个 IP 用回车分隔）
+   - 点击「确定」保存
+
+3. **等待生效并重试**
+
+```bash
+# 白名单配置通常几分钟内生效
+# 等待 5 分钟后重试
+sleep 300
+md2wechat convert article.md --upload --draft
+```
+
+> **注意**：
+> - 如果你使用本地电脑测试，需要添加你本地网络的公网 IP
+> - 如果使用云服务器，添加云服务器的公网 IP
+> - 如果使用 GitHub Actions 等动态 IP 环境，建议使用固定 IP 的服务器
+
+---
+
+### Q14: 提示 "access_token expired"
 
 **原因**：微信 access_token 过期（通常 2 小时）
 
@@ -316,7 +375,7 @@ md2wechat config init
 
 ---
 
-### Q14: 草稿创建失败 "create draft failed"
+### Q15: 草稿创建失败 "create draft failed"
 
 **可能原因 1**：公众号权限不足
 
@@ -339,7 +398,7 @@ cat draft.json
 
 ---
 
-### Q15: API 调用频率限制
+### Q16: API 调用频率限制
 
 **现象**：提示 "api freq limit"
 
@@ -360,7 +419,7 @@ done
 
 ## 高级问题
 
-### Q16: 如何在 CI/CD 中使用？
+### Q17: 如何在 CI/CD 中使用？
 
 **解决方案**：使用环境变量或 Secrets
 
@@ -386,7 +445,7 @@ jobs:
 
 ---
 
-### Q17: 如何自定义主题？
+### Q18: 如何自定义主题？
 
 **解决方案**：使用 custom-prompt
 
@@ -407,7 +466,7 @@ md2wechat convert article.md --mode ai --custom-prompt "
 
 ---
 
-### Q18: 如何批量转换多个文件？
+### Q19: 如何批量转换多个文件？
 
 **解决方案**：使用 Shell 脚本
 

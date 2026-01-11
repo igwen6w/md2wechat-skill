@@ -1,8 +1,0 @@
-# Leo API 主题
-name: leo
-type: api
-description: "API leo 主题"
-version: "1.0"
-
-# API 模式使用的主题名
-api_theme: "leo"

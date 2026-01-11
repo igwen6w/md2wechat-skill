@@ -182,6 +182,17 @@ md2wechat convert article.md --draft --cover cover.jpg
 | 🟢 **春日清新** | `--theme spring-fresh` | 清新绿色调 | 旅行日记、自然主题 |
 | 🔵 **深海静谧** | `--theme ocean-calm` | 专业蓝色调 | 技术文章、商业分析 |
 
+### API 模式主题选择
+
+| 主题名 | 命令 | 风格 | 适合内容 |
+|--------|------|------|----------|
+| **默认** | `--mode api` 或默认 | 简洁专业 | 通用内容 |
+| **bytedance** | `--theme bytedance` | 字节跳动风格 | 科技资讯 |
+| **apple** | `--theme apple` | Apple 极简风格 | 产品评测 |
+| **sports** | `--theme sports` | 运动活力风格 | 体育内容 |
+| **chinese** | `--theme chinese` | 中国传统文化风格 | 文化文章 |
+| **cyber** | `--theme cyber` | 赛博朋克风格 | 前沿科技 |
+
 ### 图片处理
 
 ```bash
@@ -321,6 +332,72 @@ iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercon
 git clone https://github.com/geekjourneyx/md2wechat-skill.git
 cd md2wechat-skill
 make build
+```
+
+---
+
+## 🤖 Claude Code 集成
+
+md2wechat 提供了 **Claude Code Skill**，让你在 Claude Code 中直接使用自然语言转换文章。
+
+### 安装方式
+
+#### 方式一：项目内使用（推荐）
+
+克隆项目后，Skill 自动可用：
+
+```bash
+git clone https://github.com/geekjourneyx/md2wechat-skill.git
+cd md2wechat-skill
+# 在 Claude Code 中直接使用
+```
+
+#### 方式二：全局安装
+
+将 Skill 复制到全局目录：
+
+```bash
+# 复制到全局技能目录
+cp -r skill/md2wechat ~/.claude/skills/
+```
+
+#### 方式三：创建符号链接
+
+```bash
+ln -s /path/to/md2wechat-skill/skill/md2wechat ~/.claude/skills/md2wechat
+```
+
+### 使用方法
+
+在 Claude Code 中直接对话：
+
+```
+请用秋日暖光主题将 article.md 转换为微信公众号格式
+```
+
+```
+帮我把这篇技术文章转换后上传到微信草稿箱
+```
+
+### 项目结构
+
+```
+md2wechat-skill/
+├── .claude-plugin/        # 插件清单
+│   └── plugin.json
+├── skill/                 # Claude Code Skill
+│   └── md2wechat/
+│       ├── SKILL.md       # 技能定义
+│       ├── references/    # 参考文档
+│       │   ├── themes.md      # 主题指南
+│       │   ├── html-guide.md  # HTML 规范
+│       │   ├── image-syntax.md # 图片语法
+│       │   └── wechat-api.md  # API 参考
+│       └── scripts/       # 执行脚本
+└── themes/                # AI 主题配置
+    ├── autumn-warm.yaml
+    ├── spring-fresh.yaml
+    └── ocean-calm.yaml
 ```
 
 ---

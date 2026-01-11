@@ -24,7 +24,7 @@ Supports two conversion modes:
   - ai:  Use Claude AI to generate HTML (flexible, requires AI)
 
 Supported themes:
-  API modes: default, leo
+  API modes: default, bytedance, apple, sports, chinese, cyber
   AI modes: autumn-warm, spring-fresh, ocean-calm, custom`,
 	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {

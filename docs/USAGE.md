@@ -57,7 +57,11 @@ md2wechat convert article.md --mode api --api-key "your_key"
 
 **可用主题**：
 - `default` - 默认主题
-- `leo` - 商务主题
+- `bytedance` - 字节跳动风格
+- `apple` - Apple 极简风格
+- `sports` - 运动活力风格
+- `chinese` - 中国传统文化风格
+- `cyber` - 赛博朋克风格
 
 ### AI 模式（适合定制）
 
