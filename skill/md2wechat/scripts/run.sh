@@ -23,10 +23,15 @@ VERSION_FILE="${CACHE_HOME}/md2wechat-skill/version.json"
 # GitHub release URL template
 RELEASE_URL="https://github.com/${REPO}/releases/download"
 
+# Minimum binary size (100KB - protects against empty/corrupted downloads)
+MIN_BINARY_SIZE=102400
+
 # Error codes
 ERR_NO_DOWNLOAD_TOOL=2
 ERR_DOWNLOAD_FAILED=3
 ERR_UNSUPPORTED_PLATFORM=4
+ERR_CACHE_DIR=5
+ERR_BINARY_INVALID=6
 
 # =============================================================================
 # LOGGING UTILITIES - User-friendly output
@@ -80,9 +85,9 @@ detect_platform() {
         arm64|aarch64) arch="arm64" ;;
         i386|i686) arch="386" ;;
         *)
-            error "Unsupported architecture: $arch"
-            return $ERR_UNSUPPORTED_PLATFORM
-            ;;
+        error "Unsupported architecture: $arch"
+        return $ERR_UNSUPPORTED_PLATFORM
+        ;;
     esac
 
     case "$os" in
@@ -169,7 +174,15 @@ download_binary() {
     [[ "$platform" == windows-* ]] && bin_name="${bin_name}.exe"
 
     local download_url="${RELEASE_URL}/v${version}/${bin_name}"
-    local temp_file="/tmp/${bin_name}.tmp"
+
+    # Use cache directory for temp file (avoids /tmp noexec issues)
+    local temp_dir="${CACHE_HOME}/tmp"
+    mkdir -p "$temp_dir" 2>/dev/null || {
+        error "Cannot create cache directory: $CACHE_HOME" \
+            "Please check permissions or set XDG_CACHE_HOME."
+        return $ERR_CACHE_DIR
+    }
+    local temp_file="${temp_dir}/${bin_name}.tmp"
 
     info "Downloading v${version} for $(platform_pretty_name "$platform")..."
 
@@ -179,8 +192,8 @@ download_binary() {
         return $ERR_NO_DOWNLOAD_TOOL
     }
 
-    # Download with timeout and retry
-    local http_code="" exit_code=0
+    # Download with timeout
+    local exit_code=0
 
     if [[ "$tool" == "curl" ]]; then
         curl -fsSL --max-time 60 --connect-timeout 10 \
@@ -191,13 +204,26 @@ download_binary() {
         exit_code=$?
     fi
 
-    if [[ $exit_code -ne 0 ]] || [[ ! -s "$temp_file" ]]; then
+    if [[ $exit_code -ne 0 ]]; then
         rm -f "$temp_file"
         return $ERR_DOWNLOAD_FAILED
     fi
 
+    # Validate downloaded file size (protects against empty/corrupted downloads)
+    local file_size=0
+    file_size=$(wc -c < "$temp_file" 2>/dev/null) || file_size=0
+
+    if [[ $file_size -lt $MIN_BINARY_SIZE ]]; then
+        rm -f "$temp_file"
+        return $ERR_DOWNLOAD_FAILED
+    fi
+
+    # Move to final location
     mv "$temp_file" "$binary_path"
-    chmod +x "$binary_path"
+
+    # Set executable permission (silently fail on Windows where chmod may not work)
+    chmod +x "$binary_path" 2>/dev/null || true
+
     save_version_info "$version" "$platform"
 
     success "Ready! (cached for next time)"
@@ -236,6 +262,18 @@ show_download_failed_help() {
         "  • Check your network and retry" \
         "  • Download manually: https://github.com/${REPO}/releases" \
         "  • Report issue: https://github.com/${REPO}/issues"
+}
+
+show_cache_dir_error_help() {
+    error "Cannot create cache directory" \
+        "" \
+        "Could not create: $CACHE_HOME" \
+        "" \
+        "Try one of these:" \
+        "  • Check you have permission to create this directory" \
+        "  • Set XDG_CACHE_HOME to a writable location:" \
+        "      export XDG_CACHE_HOME=/tmp/.cache" \
+        "  • Or manually download the binary"
 }
 
 show_version_error_help() {
@@ -285,7 +323,10 @@ ensure_binary() {
         return 1
     fi
 
-    mkdir -p "$BIN_DIR"
+    mkdir -p "$BIN_DIR" 2>/dev/null || {
+        show_cache_dir_error_help
+        return $ERR_CACHE_DIR
+    }
 
     if download_binary "$platform" "$version" "$cached_binary"; then
         echo "$cached_binary"
@@ -294,10 +335,17 @@ ensure_binary() {
 
     # Download failed - show contextual error
     local exit_code=$?
-    if [[ $exit_code -eq $ERR_NO_DOWNLOAD_TOOL ]]; then
-        return $exit_code
-    fi
-    show_download_failed_help "$platform" "$version"
+    case $exit_code in
+        $ERR_CACHE_DIR)
+            show_cache_dir_error_help
+            ;;
+        $ERR_NO_DOWNLOAD_TOOL)
+            # Already shown in download_binary
+            ;;
+        *)
+            show_download_failed_help "$platform" "$version"
+            ;;
+    esac
     return 1
 }
 
